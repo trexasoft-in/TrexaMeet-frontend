@@ -24,7 +24,7 @@ export default function JoinMeeting() {
             onChange={(e) => setRoomCode(e.target.value)}
           />
         </div>
-        <Button type="submit">Continue to pre-join</Button>
+        <Button type="submit">Continue to join</Button>
       </form>
     </div>
   )
