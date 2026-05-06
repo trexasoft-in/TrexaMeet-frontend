@@ -14,7 +14,7 @@ export default function PreJoin() {
   const { roomCode: code } = useParams()
   const navigate    = useNavigate()
   const location    = useLocation()
-  const { user }    = useAuth()
+  const user = useAuth()
   const setRoomPayload = useRoomStore((s) => s.setRoomPayload)
   const updatePreJoin  = useRoomStore((s) => s.updatePreJoin)
 
@@ -29,6 +29,9 @@ export default function PreJoin() {
   const [stream,    setStream]    = useState(null)   // ← tracked as state
   const [joining,   setJoining]   = useState(false)
   const [error,     setError]     = useState('')
+
+  const isGuest = !user?.user; // user hook returns { user, hydrated, accessToken }
+  const [guestName, setGuestName] = useState('');
 
   // ── FIX 1: srcObject must be set imperatively, NOT as a JSX prop ──
   // Every time `stream` state changes, assign it to the video element
@@ -104,40 +107,49 @@ export default function PreJoin() {
   }
 
   // ── FIX 2: Correct initial from user name ────────────────────────
-  const initials = (user?.name || user?.email || 'User')
-    .split(' ')
-    .map((w) => w[0])
-    .slice(0, 2)
-    .join('')
-    .toUpperCase() || 'U'
+  const initials = isGuest
+    ? (guestName.trim().charAt(0) || 'G').toUpperCase()
+    : (user?.user?.name || user?.user?.email || 'User')
+        .split(' ')
+        .map(w => w[0])
+        .slice(0, 2)
+        .join('')
+        .toUpperCase() || 'U';
 
   // ── Join ─────────────────────────────────────────────────────────
   const handleJoin = async () => {
-    setJoining(true)
-    setError('')
+    // Guest name validation
+    if (isGuest && !guestName.trim()) {
+      setError('Please enter your name to join.');
+      return;
+    }
+
+    setJoining(true);
+    setError('');
+
     try {
-      // Save mic/cam choice to Zustand BEFORE navigating
-      updatePreJoin({ micEnabled: micOn, camEnabled: camOn })
+      updatePreJoin({ micEnabled: micOn, camEnabled: camOn });
+      streamRef.current?.getTracks().forEach(t => t.stop());
 
-      // Stop local preview stream before handing off to LiveKit
-      streamRef.current?.getTracks().forEach((t) => t.stop())
-
-      // If we already have the token (creator coming from NewMeeting), skip the API call
+      // Creator coming from NewMeeting (always authenticated)
       if (location.state?.livekittoken) {
-        setRoomPayload(location.state)
-        navigate(`/room/${code}`, { state: location.state })  // WEBINAR DISABLED
-        return
+        setRoomPayload(location.state);
+        navigate(`/room/${code}`, { state: location.state });
+        return;
       }
 
-      // Otherwise (joining via code) — fetch token from backend
-      const data = await api.post(`/api/rooms/${code}/join`)
-      setRoomPayload(data)
-      navigate(`/room/${code}`, { state: data })  // WEBINAR DISABLED
+      // Pass guestName in body — backend ignores it for authenticated users
+      const data = await api.post(`/api/rooms/${code}/join`, {
+        guestName: guestName.trim() || undefined,
+      });
+
+      setRoomPayload(data);
+      navigate(`/room/${code}`, { state: data });
     } catch (err) {
-      setError(err?.response?.data?.error || 'Unable to join the meeting. Please try again.')
-      setJoining(false)
+      setError(err?.response?.data?.error || 'Unable to join the meeting. Please try again.');
+      setJoining(false);
     }
-  }
+  };
 
   return (
     <div className="prejoin-page">
@@ -206,7 +218,7 @@ export default function PreJoin() {
 
           <div className="prejoin-meta">
             <h1>Ready to join?</h1>
-            <p>Joining as <strong>{user?.name || user?.email}</strong></p>
+            <p>Joining as <strong>{isGuest ? (guestName || 'Guest') : (user?.user?.name || user?.user?.email)}</strong></p>
           </div>
 
           {error && (
@@ -222,6 +234,22 @@ export default function PreJoin() {
           )}
 
           <form className="form-grid" onSubmit={(e) => { e.preventDefault(); handleJoin(); }}>
+            {/* Guest name field — only shown when not signed in */}
+            {isGuest && (
+              <div className="prejoin-guest-name">
+                <label className="label">Your name</label>
+                <input
+                  className="input"
+                  type="text"
+                  placeholder="Enter your name"
+                  value={guestName}
+                  onChange={e => setGuestName(e.target.value)}
+                  maxLength={40}
+                  required
+                  autoFocus
+                />
+              </div>
+            )}
             {/* Device pickers */}
             <div className="prejoin-devices">
               <div className="prejoin-device-row">

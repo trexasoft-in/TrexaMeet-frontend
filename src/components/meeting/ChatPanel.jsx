@@ -1,33 +1,24 @@
-import { useRef, useEffect, useState } from 'react'
-import { useDataChannel, useLocalParticipant } from '@livekit/components-react'
-import { SendIcon } from './icons'
-
-const encoder = new TextEncoder()
+import { useRef, useEffect, useState } from 'react';
+import { SendIcon } from './icons';
 
 export default function ChatPanel({ messages = [], onSend }) {
-  const [text, setText] = useState('')
-  const endRef = useRef(null)
-  const { localParticipant } = useLocalParticipant()
-
-  const { send } = useDataChannel('trexa-chat')
+  const [text, setText] = useState('');
+  const endRef = useRef(null);
 
   const sendMsg = (e) => {
-    e.preventDefault()
-    const trimmed = text.trim()
-    if (!trimmed) return
-    const payload = {
-      text: trimmed,
-      sender: localParticipant?.name || localParticipant?.identity || 'You',
-      ts: Date.now(),
+    e.preventDefault();
+    const trimmed = text.trim();
+    if (!trimmed) return;
+    
+    if (onSend) {
+      onSend(trimmed);
     }
-    send(encoder.encode(JSON.stringify(payload)), { reliable: true })
-    onSend?.(trimmed)
-    setText('')
-  }
+    setText('');
+  };
 
   useEffect(() => {
-    endRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }, [messages])
+    endRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [messages]);
 
   return (
     <div className="chat-panel">
@@ -41,7 +32,7 @@ export default function ChatPanel({ messages = [], onSend }) {
           messages.map((msg, i) => (
             <div key={i} className={`chat-msg${msg.own ? ' chat-msg--own' : ''}`}>
               <div className="chat-msg-meta">
-                <span className="chat-msg-sender">{msg.sender}</span>
+                <span className="chat-msg-sender">{msg.own ? 'You' : msg.sender}</span>
                 <span className="chat-msg-time">
                   {new Date(msg.ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                 </span>
@@ -52,6 +43,7 @@ export default function ChatPanel({ messages = [], onSend }) {
         )}
         <div ref={endRef} />
       </div>
+
       <form onSubmit={sendMsg} className="chat-compose">
         <input
           className="chat-input"
@@ -64,5 +56,5 @@ export default function ChatPanel({ messages = [], onSend }) {
         </button>
       </form>
     </div>
-  )
+  );
 }

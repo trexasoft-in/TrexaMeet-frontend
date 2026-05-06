@@ -22,27 +22,35 @@ export default function Room() {
 
   useEffect(() => {
     if (location.state) {
-      setRoomPayload(location.state)
-      return
+      setRoomPayload(location.state);
+      return;
     }
-    ;(async () => {
+    // No state = direct URL visit, try to join
+    (async () => {
       try {
-        const data = await api.post(`/api/rooms/${roomCode}/join`)
-        setRoomPayload(data)
+        const data = await api.post(`/api/rooms/${roomCode}/join`);
+        setRoomPayload(data);
       } catch (err) {
-        console.error('TrexaMeet join failed', err)
-        navigate('/join', { replace: true })
+        // If unauthenticated, redirect to prejoin so they can enter their name
+        navigate(`/prejoin/${roomCode}`, { replace: true });
       }
-    })()
-  }, [roomCode]) // eslint-disable-line
+    })();
+  }, [roomCode]); // eslint-disable-line
 
   const handleLeave = () => {
-    if (leavingRef.current) return
-    leavingRef.current = true
-    api.post(`/api/rooms/${roomCode}/leave`).catch(() => {})
-    resetRoom()
-    navigate(`/meeting-ended/${roomCode}`, { replace: true })
-  }
+    if (leavingRef.current) return;
+    leavingRef.current = true;
+
+    const isGuest = room?.isGuest;
+
+    // Only call /leave for authenticated users — guests have no DB row
+    if (!isGuest) {
+      api.post(`/api/rooms/${roomCode}/leave`).catch(() => {});
+    }
+
+    resetRoom();
+    navigate(`/meeting-ended/${roomCode}`, { replace: true });
+  };
 
   if (!livekitToken || !livekitUrl) {
     return <div className="card">Connecting to room…</div>

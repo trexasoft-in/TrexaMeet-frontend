@@ -1,10 +1,17 @@
-import { NavLink } from 'react-router-dom'
+import { NavLink, useNavigate } from 'react-router-dom'
 import useAuthStore from '../../store/auth.store'
 import Avatar from '../common/Avatar'
 import logoImg from '/logo.png'
 
 export default function Sidebar({ isOpen, onClose }) {
   const user = useAuthStore((s) => s.user)
+  const navigate = useNavigate()
+  const clearStoreSession = useAuthStore((s) => s.clearSession)
+
+  const handleLogout = () => {
+    clearStoreSession() // clears Zustand + localStorage via auth.store
+    navigate('/login', { replace: true })
+  }
 
   return (
     <aside className={`sidebar ${isOpen ? 'open' : ''}`}>
@@ -54,7 +61,7 @@ export default function Sidebar({ isOpen, onClose }) {
       </nav>
 
       {/* User footer */}
-      <div className="sidebar-footer">
+      <footer className="sidebar-footer">
         <div className="user-row">
           <Avatar name={user?.name} />
           <div className="user-info">
@@ -62,7 +69,17 @@ export default function Sidebar({ isOpen, onClose }) {
             <span>{user?.email}</span>
           </div>
         </div>
-      </div>
+
+        <button className="sidebar-logout-btn" onClick={handleLogout}>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
+            stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+            <polyline points="16 17 21 12 16 7" />
+            <line x1="21" y1="12" x2="9" y2="12" />
+          </svg>
+          Sign out
+        </button>
+      </footer>
     </aside>
   )
 }

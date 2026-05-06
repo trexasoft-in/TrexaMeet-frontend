@@ -10,7 +10,7 @@ export default function AuthGuard({ children }) {
 
   useEffect(() => {
     if (hydrated && !user) {
-      navigate('/login', { replace: true })
+      navigate('/landing', { replace: true })
     }
   }, [hydrated, user, navigate])
 

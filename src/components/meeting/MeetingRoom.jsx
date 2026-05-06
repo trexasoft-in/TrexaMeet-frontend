@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState } from 'react'
-import { useParticipants } from '@livekit/components-react'
+import { useEffect, useMemo, useState, useCallback, useRef } from 'react'
+import { useParticipants, useDataChannel, useLocalParticipant } from '@livekit/components-react'
 import VideoGrid from './VideoGrid'
 import ControlBar from './ControlBar'
 import ChatPanel from './ChatPanel'
@@ -146,7 +146,63 @@ export default function MeetingRoom({ roomCode, room, onLeave }) {
   const [unread, setUnread] = useState(0)
   const [showInvite, setShowInvite] = useState(false)
   const participants = useParticipants()
+  const { localParticipant } = useLocalParticipant()
   useMeetingClock()
+
+  const panelRef = useRef(panel)
+  useEffect(() => {
+    panelRef.current = panel
+  }, [panel])
+
+  const [toast, setToast] = useState(null)
+  const [messages, setMessages] = useState([])
+  const decoder = useMemo(() => new TextDecoder(), [])
+  const encoder = useMemo(() => new TextEncoder(), [])
+
+  const { send } = useDataChannel('trexa-chat', (msg) => {
+    try {
+      const data = JSON.parse(decoder.decode(msg.payload))
+      const isOwn = msg.from?.identity === localParticipant?.identity
+      setMessages(prev => [
+        ...prev,
+        {
+          text: data.text,
+          sender: data.sender,
+          ts: data.ts,
+          own: isOwn,
+        },
+      ])
+      if (!isOwn && panelRef.current !== 'chat') {
+        setUnread(n => n + 1)
+        setToast({
+          sender: data.sender,
+          text: data.text.length > 40 ? data.text.slice(0, 40) + '...' : data.text
+        })
+        setTimeout(() => setToast(null), 4000)
+      }
+    } catch {
+      // ignore malformed payloads
+    }
+  })
+
+  const handleSendChat = useCallback((text) => {
+    const payload = {
+      text,
+      sender: localParticipant?.name || localParticipant?.identity || 'You',
+      ts: Date.now(),
+    }
+    // Update local state immediately because LiveKit doesn't echo to sender
+    setMessages(prev => [
+      ...prev,
+      {
+        text: payload.text,
+        sender: payload.sender,
+        ts: payload.ts,
+        own: true,
+      }
+    ])
+    send(encoder.encode(JSON.stringify(payload)), { reliable: true })
+  }, [send, localParticipant, encoder])
 
   const typeLabel = useMemo(() => ({
     direct: '1-to-1 call',
@@ -204,11 +260,6 @@ export default function MeetingRoom({ roomCode, room, onLeave }) {
             <span className="meet-chat-inner">
               <ChatIcon size={16} />
               Chat
-              {unread > 0 && (
-                <span className="meet-chat-badge" aria-label={`${unread} unread`}>
-                  {unread > 9 ? '9+' : unread}
-                </span>
-              )}
             </span>
           </button>
 
@@ -251,21 +302,40 @@ export default function MeetingRoom({ roomCode, room, onLeave }) {
               </button>
             </div>
             <div className="meet-rail-body">
-              {panel === 'chat'
-                ? <ChatPanel onNewMessage={() => { if (panel !== 'chat') setUnread(n => n + 1) }} />
-                : <ParticipantPanel />
-              }
+              {panel === 'chat' ? (
+                <ChatPanel
+                  messages={messages}
+                  onSend={handleSendChat}
+                />
+              ) : (
+                <ParticipantPanel roomCode={roomCode} myRole={room?.myrole} />
+              )}
             </div>
           </aside>
         )}
       </div>
 
+      {toast && (
+        <div
+          className="meet-toast-google"
+          onClick={() => { setPanel('chat'); setToast(null) }}
+        >
+          <div className="meet-toast-google-avatar">
+            {(toast.sender || 'U').charAt(0).toUpperCase()}
+          </div>
+          <div className="meet-toast-google-content">
+            <div className="meet-toast-google-sender">{toast.sender}</div>
+            <div className="meet-toast-google-text">{toast.text}</div>
+          </div>
+        </div>
+      )}
       <ControlBar
         onLeave={onLeave}
         onToggleChat={() => togglePanel('chat')}
         onToggleParticipants={() => togglePanel('participants')}
         chatOpen={panel === 'chat'}
         peopleOpen={panel === 'participants'}
+        unread={unread}
       />
     </div>
   )
