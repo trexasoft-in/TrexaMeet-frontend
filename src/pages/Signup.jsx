@@ -50,12 +50,11 @@ export default function Signup() {
   return (
     <div className="auth-loading">
       <div className="auth-form-card">
-        <div className="brand-mark">TM</div>
+        <img src="/logo.png" alt="TrexaMeet" className="app-boot-logo" />
 
         {step === 'signup' ? (
           <>
             <h2>Create your account</h2>
-            <p className="muted">Powered by Trexa CentralAuth</p>
             <form className="form-grid" onSubmit={handleSignup}>
               <div>
                 <label className="label">Name</label>

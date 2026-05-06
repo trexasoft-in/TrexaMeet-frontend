@@ -4,10 +4,10 @@ import Sidebar from './Sidebar'
 import logoImg from '/logo.png'
 
 const titleMap = {
-  '/':        { title: 'Dashboard',     sub: 'Start or join a meeting' },
-  '/new':     { title: 'New Meeting',   sub: 'Create a meeting' },
-  '/join':    { title: 'Join Meeting',  sub: 'Enter a room code to join' },
-  '/history': { title: 'Call History',  sub: 'Your past meetings and calls' },
+  '/dashboard':         { title: 'Dashboard',    sub: 'Start or join a meeting' },
+  '/dashboard/new':     { title: 'New Meeting',  sub: 'Create a meeting' },
+  '/dashboard/join':    { title: 'Join Meeting', sub: 'Enter a room code to join' },
+  '/dashboard/history': { title: 'Call History', sub: 'Your past meetings and calls' },
 }
 
 export default function AppLayout({ children }) {

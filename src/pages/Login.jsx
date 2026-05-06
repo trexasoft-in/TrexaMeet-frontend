@@ -17,12 +17,12 @@ export default function Login() {
   // ── If already logged in, skip login page entirely ──────────────────────
   useEffect(() => {
     // Check Zustand store first (populated after previous login in same session)
-    if (user) { navigate('/', { replace: true }); return }
+    if (user) { navigate('/dashboard', { replace: true }); return }
     // Check sessionStorage (survives same-tab reload)
     const existing = getSession()
     if (existing?.accessToken && existing?.user) {
       setStoreSession(existing)
-      navigate('/', { replace: true })
+      navigate('/dashboard', { replace: true })
     }
   }, []) // eslint-disable-line
 
@@ -66,7 +66,7 @@ export default function Login() {
       setSession(session)                        // → sessionStorage + memorySession
       setRefreshToken(refresh)                   // → persists refresh token
       setStoreSession(session)                   // → Zustand (React components)
-      navigate('/')
+      navigate('/dashboard', { replace: true });
     } catch (err) {
       setError(err?.response?.data?.error || 'Login failed. Check your credentials.')
     } finally {
@@ -77,9 +77,8 @@ export default function Login() {
   return (
     <div className="auth-loading">
       <div className="auth-form-card">
-        <div className="brand-mark">TM</div>
+        <img src="/logo.png" alt="TrexaMeet" className="app-boot-logo" />
         <h2>Sign in to TrexaMeet</h2>
-        <p className="muted">Powered by Trexa CentralAuth</p>
         <form className="form-grid" onSubmit={handleLogin}>
           <div>
             <label className="label">Email</label>

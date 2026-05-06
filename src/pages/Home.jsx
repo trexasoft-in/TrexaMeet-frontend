@@ -30,7 +30,7 @@ export default function Home() {
             <h3>New Meeting</h3>
             <p>Create a room, get a code, and share it with your team.</p>
             <div style={{ marginTop: 'auto', paddingTop: 16 }}>
-              <Link to="/new" style={{ display: 'block' }}>
+              <Link to="/dashboard/new" style={{ display: 'block' }}>
                 <Button style={{ width: '100%' }}>Create Meeting</Button>
               </Link>
             </div>
@@ -49,7 +49,7 @@ export default function Home() {
             <h3>Join by Code</h3>
             <p>Enter a code like <code style={{ fontSize: 12 }}>TRX-XXXXXXX</code> to join any room.</p>
             <div style={{ marginTop: 'auto', paddingTop: 16 }}>
-              <Link to="/join" style={{ display: 'block' }}>
+              <Link to="/dashboard/join" style={{ display: 'block' }}>
                 <Button style={{ width: '100%' }}>Join Meeting</Button>
               </Link>
             </div>
