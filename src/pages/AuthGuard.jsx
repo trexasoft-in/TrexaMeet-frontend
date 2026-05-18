@@ -1,18 +1,17 @@
-import { useEffect } from 'react'
-import { useNavigate } from 'react-router-dom'
-import useAuthStore from '../store/auth.store'
-import Loader from '../components/common/Loader'
+import { useEffect } from 'react';
+import Loader from '../components/common/Loader';
+import useAuthStore from '../store/auth.store';
+import { goToCentralLogin } from '../lib/centralAuth';
 
 export default function AuthGuard({ children }) {
-  const user = useAuthStore(s => s.user);
-  const hydrated = useAuthStore(s => s.hydrated);
-  const navigate = useNavigate();
+  const user = useAuthStore((s) => s.user);
+  const hydrated = useAuthStore((s) => s.hydrated);
 
   useEffect(() => {
     if (hydrated && !user) {
-      navigate('/landing', { replace: true });
+      goToCentralLogin(window.location.href);
     }
-  }, [hydrated, user, navigate]);
+  }, [hydrated, user]);
 
   if (!hydrated) {
     return (
@@ -28,4 +27,3 @@ export default function AuthGuard({ children }) {
   if (!user) return null;
   return children;
 }
-

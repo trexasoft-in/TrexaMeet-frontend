@@ -1,5 +1,6 @@
 import { useEffect } from 'react';
 import { Link } from 'react-router-dom';
+import { goToCentralLogin, goToCentralSignup } from '../lib/centralAuth';
 
 export default function Landing() {
   useEffect(() => {
@@ -39,8 +40,22 @@ export default function Landing() {
         <div className="lp-nav-links">
           <a href="#features" className="lp-nav-link">Features</a>
           <a href="#how-it-works" className="lp-nav-link">How it works</a>
-          <Link to="/login" className="lp-nav-link">Sign in</Link>
-          <Link to="/signup" className="lp-nav-cta">Get started free</Link>
+          <button
+            type="button"
+            className="lp-nav-link"
+            onClick={() => goToCentralLogin(window.location.origin + '/dashboard')}
+            style={{ cursor: 'pointer', background: 'none', border: 'none', font: 'inherit' }}
+          >
+            Sign in
+          </button>
+          <button
+            type="button"
+            className="lp-nav-cta"
+            onClick={() => goToCentralSignup(window.location.origin + '/dashboard')}
+            style={{ cursor: 'pointer', border: 'none' }}
+          >
+            Get started free
+          </button>
         </div>
       </nav>
 
@@ -58,19 +73,28 @@ export default function Landing() {
           Start meetings instantly and bring your team together with a fast, reliable, and intuitive video experience..
         </p>
         <div className="lp-hero-actions">
-          <Link to="/signup" className="lp-btn-primary">
+          <button
+            type="button"
+            className="lp-btn-primary"
+            onClick={() => goToCentralSignup(window.location.origin + '/dashboard')}
+          >
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
               <path d="M15 10l4.553-2.276A1 1 0 0 1 21 8.723v6.554a1 1 0 0 1-1.447.894L15 14" />
               <rect x="2" y="7" width="13" height="10" rx="2" />
             </svg>
             Start a meeting
-          </Link>
-          <Link to="/login" className="lp-btn-outline">
+          </button>
+          <button
+            type="button"
+            className="lp-btn-outline"
+            onClick={() => goToCentralLogin(window.location.origin + '/dashboard')}
+            style={{ cursor: 'pointer' }}
+          >
             Sign in
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
               <polyline points="9 18 15 12 9 6" />
             </svg>
-          </Link>
+          </button>
         </div>
 
         {/* Mock meeting preview */}
@@ -186,8 +210,21 @@ export default function Landing() {
           <h2 className="lp-cta-heading">Ready to meet?</h2>
           <p className="lp-cta-sub">Free to use. No credit card. Start your first meeting in seconds.</p>
           <div className="lp-hero-actions" style={{ justifyContent: 'center' }}>
-            <Link to="/signup" className="lp-btn-primary lp-btn-primary--white">Create free account</Link>
-            <Link to="/login" className="lp-btn-outline lp-btn-outline--white">Sign in</Link>
+            <button
+              type="button"
+              className="lp-btn-primary lp-btn-primary--white"
+              onClick={() => goToCentralSignup(window.location.origin + '/dashboard')}
+            >
+              Create free account
+            </button>
+            <button
+              type="button"
+              className="lp-btn-outline lp-btn-outline--white"
+              onClick={() => goToCentralLogin(window.location.origin + '/dashboard')}
+              style={{ cursor: 'pointer' }}
+            >
+              Sign in
+            </button>
           </div>
         </div>
       </section>
@@ -200,8 +237,44 @@ export default function Landing() {
           <span className="lp-footer-copy">© 2026 TrexaMeet</span>
         </div>
         <div className="lp-footer-links">
-          <Link to="/login">Sign in</Link>
-          <Link to="/signup">Sign up</Link>
+          <button
+            type="button"
+            className="lp-footer-btn-link"
+            onClick={() => goToCentralLogin(window.location.origin + '/dashboard')}
+            style={{
+              background: 'none',
+              border: 'none',
+              color: 'var(--text-faint)',
+              fontSize: '13px',
+              cursor: 'pointer',
+              padding: 0,
+              fontFamily: 'inherit',
+              transition: 'color 140ms'
+            }}
+            onMouseOver={(e) => e.target.style.color = 'var(--text-muted)'}
+            onMouseOut={(e) => e.target.style.color = 'var(--text-faint)'}
+          >
+            Sign in
+          </button>
+          <button
+            type="button"
+            className="lp-footer-btn-link"
+            onClick={() => goToCentralSignup(window.location.origin + '/dashboard')}
+            style={{
+              background: 'none',
+              border: 'none',
+              color: 'var(--text-faint)',
+              fontSize: '13px',
+              cursor: 'pointer',
+              padding: 0,
+              fontFamily: 'inherit',
+              transition: 'color 140ms'
+            }}
+            onMouseOver={(e) => e.target.style.color = 'var(--text-muted)'}
+            onMouseOut={(e) => e.target.style.color = 'var(--text-faint)'}
+          >
+            Sign up
+          </button>
         </div>
       </footer>
 

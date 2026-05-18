@@ -10,6 +10,7 @@ import {
   clearSession,
 } from '../lib/auth';
 import Loader from '../components/common/Loader';
+import { getCentralAuthBase } from '../lib/centralAuth';
 
 export default function RootRedirect() {
   const user = useAuthStore(s => s.user);
@@ -54,7 +55,7 @@ export default function RootRedirect() {
         const refreshToken = getRefreshToken();
         if (refreshToken) {
           try {
-            const base = import.meta.env.VITE_CENTRAL_AUTH_URL?.replace(/\/$/, '');
+            const base = getCentralAuthBase();
             const { data } = await axios.post(`${base}/api/auth/refresh`, { refreshtoken: refreshToken });
             const newToken = data?.accesstoken || data?.accessToken;
             if (newToken) {
