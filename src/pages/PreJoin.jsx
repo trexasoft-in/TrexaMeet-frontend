@@ -1,124 +1,207 @@
-import { useEffect, useRef, useState, useCallback } from 'react'
-import { useNavigate, useParams, useLocation } from 'react-router-dom'
-import api from '../lib/api'
-import useAuth from '../hooks/useAuth'
-import {
-  MicOnIcon, MicOffIcon,
-  CameraOnIcon, CameraOffIcon,
-  RefreshIcon
-} from '../components/meeting/icons'
-import Button from '../components/common/Button'
-import useRoomStore from '../store/room.store'
+import { useEffect, useRef, useState, useCallback } from 'react';
+import { useNavigate, useParams, useLocation } from 'react-router-dom';
+import api from '../lib/api';
+import useAuth from '../hooks/useAuth';
+import { MicOnIcon, MicOffIcon, CameraOnIcon, CameraOffIcon, RefreshIcon } from '../components/meeting/icons';
+import Button from '../components/common/Button';
+import useRoomStore from '../store/room.store';
 
 export default function PreJoin() {
-  const { roomCode: code } = useParams()
-  const navigate    = useNavigate()
-  const location    = useLocation()
-  const user = useAuth()
-  const setRoomPayload = useRoomStore((s) => s.setRoomPayload)
-  const updatePreJoin  = useRoomStore((s) => s.updatePreJoin)
+  const { roomCode: code } = useParams();
+  const navigate = useNavigate();
+  const location = useLocation();
+  const user = useAuth();
 
-  const videoRef    = useRef(null)
-  const streamRef   = useRef(null)
+  const setRoomPayload = useRoomStore(s => s.setRoomPayload);
+  const updatePreJoin = useRoomStore(s => s.updatePreJoin);
 
-  const [micOn,     setMicOn]     = useState(true)
-  const [camOn,     setCamOn]     = useState(true)
-  const [devices,   setDevices]   = useState({ audio: [], video: [] })
-  const [selAudio,  setSelAudio]  = useState('')
-  const [selVideo,  setSelVideo]  = useState('')
-  const [stream,    setStream]    = useState(null)   // ← tracked as state
-  const [joining,   setJoining]   = useState(false)
-  const [error,     setError]     = useState('')
+  const videoRef = useRef(null);
+  const streamRef = useRef(null);
 
-  const isGuest = !user?.user; // user hook returns { user, hydrated, accessToken }
+  const [micOn, setMicOn] = useState(true);
+  const [camOn, setCamOn] = useState(true);
+  const [devices, setDevices] = useState({ audio: [], video: [] });
+  const [selAudio, setSelAudio] = useState('');
+  const [selVideo, setSelVideo] = useState('');
+  const [stream, setStream] = useState(null);
+  const [joining, setJoining] = useState(false);
+  const [error, setError] = useState('');
   const [guestName, setGuestName] = useState('');
 
-  // ── FIX 1: srcObject must be set imperatively, NOT as a JSX prop ──
-  // Every time `stream` state changes, assign it to the video element
+  const isGuest = !user?.user;
+
   useEffect(() => {
-    const el = videoRef.current
-    if (!el || !stream) return
-    el.srcObject = stream
-    el.play().catch(() => {
-      // Autoplay blocked (e.g. in some browsers until user gesture)
-      // Adding muted + playsinline in JSX already covers most cases
-    })
-  }, [stream])
+    const html = document.documentElement;
+    const body = document.body;
+
+    const prevHtmlOverflow = html.style.overflow;
+    const prevBodyOverflow = body.style.overflow;
+    const prevHtmlHeight = html.style.height;
+    const prevBodyHeight = body.style.height;
+
+    html.style.overflow = 'auto';
+    body.style.overflow = 'auto';
+    html.style.height = 'auto';
+    body.style.height = 'auto';
+
+    return () => {
+      html.style.overflow = prevHtmlOverflow;
+      body.style.overflow = prevBodyOverflow;
+      html.style.height = prevHtmlHeight;
+      body.style.height = prevBodyHeight;
+    };
+  }, []);
+
+  useEffect(() => {
+    const el = videoRef.current;
+    if (!el || !stream) return;
+    el.srcObject = stream;
+    el.play().catch(() => {});
+  }, [stream]);
+
+  const stopCurrentStream = useCallback(() => {
+    streamRef.current?.getTracks()?.forEach(track => track.stop());
+    streamRef.current = null;
+    setStream(null);
+  }, []);
+
+  const loadDevices = useCallback(async () => {
+    const list = await navigator.mediaDevices.enumerateDevices();
+    const audio = list.filter(d => d.kind === 'audioinput');
+    const video = list.filter(d => d.kind === 'videoinput');
+    setDevices({ audio, video });
+    return { audio, video };
+  }, []);
 
   const startStream = useCallback(async (audioId, videoId) => {
     try {
-      // Stop previous tracks before requesting new ones
-      streamRef.current?.getTracks().forEach((t) => t.stop())
+      stopCurrentStream();
 
       const newStream = await navigator.mediaDevices.getUserMedia({
-        audio: audioId ? { deviceId: { exact: audioId } } : true,
-        video: videoId ? { deviceId: { exact: videoId } } : true
-      })
+        audio: micOn
+          ? (audioId ? { deviceId: { exact: audioId } } : true)
+          : false,
+        video: camOn
+          ? (videoId ? { deviceId: { exact: videoId } } : true)
+          : false,
+      });
 
-      streamRef.current = newStream
-      setStream(newStream)   // triggers the useEffect above
-      setError('')
+      streamRef.current = newStream;
+      setStream(newStream);
+      setError('');
+
+      const tracksAudio = newStream.getAudioTracks();
+      const tracksVideo = newStream.getVideoTracks();
+
+      if (tracksAudio.length > 0) {
+        tracksAudio.forEach(t => {
+          t.enabled = micOn;
+        });
+      }
+
+      if (tracksVideo.length > 0) {
+        tracksVideo.forEach(t => {
+          t.enabled = camOn;
+        });
+      }
     } catch (err) {
       setError(
-        err.name === 'NotAllowedError'
-          ? 'Camera or microphone access was denied. Allow access in browser settings.'
+        err?.name === 'NotAllowedError'
+          ? 'Camera or microphone access was denied. Please allow permissions and try again.'
           : 'Unable to access camera or microphone.'
-      )
+      );
     }
-  }, [])
+  }, [camOn, micOn, stopCurrentStream]);
 
-  // ── Enumerate devices on mount, then start stream ────────────────
   useEffect(() => {
-    let cancelled = false
+    let cancelled = false;
 
-    navigator.mediaDevices.enumerateDevices().then((list) => {
-      if (cancelled) return
-      const audio = list.filter((d) => d.kind === 'audioinput')
-      const video = list.filter((d) => d.kind === 'videoinput')
-      setDevices({ audio, video })
+    const initDevices = async () => {
+      try {
+        await navigator.mediaDevices.getUserMedia({ audio: true, video: true });
+        if (cancelled) return;
 
-      const aId = audio[0]?.deviceId || ''
-      const vId = video[0]?.deviceId || ''
-      setSelAudio(aId)
-      setSelVideo(vId)
-      startStream(aId, vId)
-    })
+        const { audio, video } = await loadDevices();
+        if (cancelled) return;
+
+        const aId = audio[0]?.deviceId || '';
+        const vId = video[0]?.deviceId || '';
+
+        setSelAudio(aId);
+        setSelVideo(vId);
+
+        updatePreJoin({
+          selectedMicId: aId,
+          selectedCameraId: vId,
+          micEnabled: true,
+          camEnabled: true,
+        });
+
+        await startStream(aId, vId);
+      } catch (err) {
+        if (cancelled) return;
+        setError(
+          err?.name === 'NotAllowedError'
+            ? 'Camera or microphone access was denied. Please allow permissions to continue.'
+            : 'Unable to access camera or microphone.'
+        );
+
+        try {
+          const { audio, video } = await loadDevices();
+          if (cancelled) return;
+          setSelAudio(audio[0]?.deviceId || '');
+          setSelVideo(video[0]?.deviceId || '');
+        } catch {
+          // ignore
+        }
+      }
+    };
+
+    initDevices();
 
     return () => {
-      cancelled = true
-      streamRef.current?.getTracks().forEach((t) => t.stop())
-    }
-  }, [startStream])
+      cancelled = true;
+      stopCurrentStream();
+    };
+  }, [loadDevices, startStream, stopCurrentStream, updatePreJoin]);
 
-  // ── Toggle mic ───────────────────────────────────────────────────
   const handleToggleMic = () => {
-    streamRef.current?.getAudioTracks().forEach((t) => {
-      t.enabled = !t.enabled
-    })
-    setMicOn((v) => !v)
-  }
+    const next = !micOn;
+    streamRef.current?.getAudioTracks()?.forEach(track => {
+      track.enabled = next;
+    });
+    setMicOn(next);
+    updatePreJoin({ micEnabled: next, selectedMicId: selAudio });
+  };
 
-  // ── Toggle cam ───────────────────────────────────────────────────
   const handleToggleCam = () => {
-    streamRef.current?.getVideoTracks().forEach((t) => {
-      t.enabled = !t.enabled
-    })
-    setCamOn((v) => !v)
-  }
+    const next = !camOn;
+    streamRef.current?.getVideoTracks()?.forEach(track => {
+      track.enabled = next;
+    });
+    setCamOn(next);
+    updatePreJoin({ camEnabled: next, selectedCameraId: selVideo });
+  };
 
-  // ── FIX 2: Correct initial from user name ────────────────────────
-  const initials = isGuest
-    ? (guestName.trim().charAt(0) || 'G').toUpperCase()
-    : (user?.user?.name || user?.user?.email || 'User')
-        .split(' ')
-        .map(w => w[0])
-        .slice(0, 2)
-        .join('')
-        .toUpperCase() || 'U';
+  const handleAudioChange = async e => {
+    const next = e.target.value;
+    setSelAudio(next);
+    updatePreJoin({ selectedMicId: next, micEnabled: micOn, selectedCameraId: selVideo, camEnabled: camOn });
+    await startStream(next, selVideo);
+  };
 
-  // ── Join ─────────────────────────────────────────────────────────
+  const handleVideoChange = async e => {
+    const next = e.target.value;
+    setSelVideo(next);
+    updatePreJoin({ selectedCameraId: next, micEnabled: micOn, selectedMicId: selAudio, camEnabled: camOn });
+    await startStream(selAudio, next);
+  };
+
+  const handleRefresh = async () => {
+    await startStream(selAudio, selVideo);
+  };
+
   const handleJoin = async () => {
-    // Guest name validation
     if (isGuest && !guestName.trim()) {
       setError('Please enter your name to join.');
       return;
@@ -128,19 +211,23 @@ export default function PreJoin() {
     setError('');
 
     try {
-      updatePreJoin({ micEnabled: micOn, camEnabled: camOn });
-      streamRef.current?.getTracks().forEach(t => t.stop());
+      updatePreJoin({
+        micEnabled: micOn,
+        camEnabled: camOn,
+        selectedMicId: selAudio,
+        selectedCameraId: selVideo,
+      });
 
-      // Creator coming from NewMeeting (always authenticated)
+      streamRef.current?.getTracks()?.forEach(t => t.stop());
+
       if (location.state?.livekittoken) {
         setRoomPayload(location.state);
         navigate(`/room/${code}`, { state: location.state });
         return;
       }
 
-      // Pass guestName in body — backend ignores it for authenticated users
       const data = await api.post(`/api/rooms/${code}/join`, {
-        guestName: guestName.trim() || undefined,
+        guestName: isGuest ? guestName.trim() : undefined,
       });
 
       setRoomPayload(data);
@@ -151,18 +238,19 @@ export default function PreJoin() {
     }
   };
 
+  const initials = isGuest
+    ? (guestName.trim().charAt(0) || 'G').toUpperCase()
+    : (user?.user?.name || user?.user?.email || 'U')
+        .split(' ')
+        .map(w => w[0])
+        .slice(0, 2)
+        .join('')
+        .toUpperCase();
+
   return (
     <div className="prejoin-page">
       <div className="prejoin-card">
-
-        {/* ── Preview ───────────────────────────────── */}
         <div className="prejoin-preview">
-
-          {/*
-            FIX 1 — video element always rendered;
-            visibility toggled via CSS so the ref is always attached.
-            srcObject is assigned imperatively in the useEffect above.
-          */}
           <video
             ref={videoRef}
             className="prejoin-video"
@@ -172,14 +260,12 @@ export default function PreJoin() {
             playsInline
           />
 
-          {/* Avatar shown only when cam is off */}
           {!camOn && (
             <div className="prejoin-novideo">
               <div className="prejoin-avatar">{initials}</div>
             </div>
           )}
 
-          {/* Overlay controls */}
           <div className="prejoin-overlay-btns">
             <button
               type="button"
@@ -204,7 +290,7 @@ export default function PreJoin() {
             <button
               type="button"
               className="pj-icon-btn"
-              onClick={() => startStream(selAudio, selVideo)}
+              onClick={handleRefresh}
               aria-label="Refresh camera feed"
               title="Refresh camera"
             >
@@ -213,28 +299,32 @@ export default function PreJoin() {
           </div>
         </div>
 
-        {/* ── Info + join ───────────────────────────── */}
         <div className="prejoin-info">
-
           <div className="prejoin-meta">
             <h1>Ready to join?</h1>
-            <p>Joining as <strong>{isGuest ? (guestName || 'Guest') : (user?.user?.name || user?.user?.email)}</strong></p>
+            <p>
+              Joining as <strong>{isGuest ? guestName || 'Guest' : (user?.user?.name || user?.user?.email)}</strong>
+            </p>
           </div>
 
           {error && (
             <div className="prejoin-error" role="alert">
-              <svg fill="none" stroke="currentColor" strokeWidth="2"
-                   viewBox="0 0 24 24" width="15" height="15" aria-hidden="true">
-                <circle cx="12" cy="12" r="10"/>
-                <line x1="12" y1="8"  x2="12"   y2="12"/>
-                <line x1="12" y1="16" x2="12.01" y2="16"/>
+              <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" width="15" height="15" aria-hidden="true">
+                <circle cx="12" cy="12" r="10" />
+                <line x1="12" y1="8" x2="12" y2="12" />
+                <line x1="12" y1="16" x2="12.01" y2="16" />
               </svg>
               {error}
             </div>
           )}
 
-          <form className="form-grid" onSubmit={(e) => { e.preventDefault(); handleJoin(); }}>
-            {/* Guest name field — only shown when not signed in */}
+          <form
+            className="form-grid"
+            onSubmit={e => {
+              e.preventDefault();
+              handleJoin();
+            }}
+          >
             {isGuest && (
               <div className="prejoin-guest-name">
                 <label className="label">Your name</label>
@@ -250,7 +340,7 @@ export default function PreJoin() {
                 />
               </div>
             )}
-            {/* Device pickers */}
+
             <div className="prejoin-devices">
               <div className="prejoin-device-row">
                 <span className="pj-device-label">
@@ -259,20 +349,18 @@ export default function PreJoin() {
                 <select
                   className="pj-select"
                   value={selAudio}
-                  onChange={(e) => {
-                    setSelAudio(e.target.value)
-                    startStream(e.target.value, selVideo)
-                  }}
+                  onChange={handleAudioChange}
                   aria-label="Select microphone"
                 >
-                  {devices.audio.length === 0
-                    ? <option value="">Default microphone</option>
-                    : devices.audio.map((d) => (
-                        <option key={d.deviceId} value={d.deviceId}>
-                          {d.label || `Microphone ${d.deviceId.slice(0, 8)}`}
-                        </option>
-                      ))
-                  }
+                  {devices.audio.length === 0 ? (
+                    <option value="">Default microphone</option>
+                  ) : (
+                    devices.audio.map(d => (
+                      <option key={d.deviceId} value={d.deviceId}>
+                        {d.label || `Microphone ${d.deviceId.slice(0, 8)}`}
+                      </option>
+                    ))
+                  )}
                 </select>
               </div>
 
@@ -283,25 +371,22 @@ export default function PreJoin() {
                 <select
                   className="pj-select"
                   value={selVideo}
-                  onChange={(e) => {
-                    setSelVideo(e.target.value)
-                    startStream(selAudio, e.target.value)
-                  }}
+                  onChange={handleVideoChange}
                   aria-label="Select camera"
                 >
-                  {devices.video.length === 0
-                    ? <option value="">Default camera</option>
-                    : devices.video.map((d) => (
-                        <option key={d.deviceId} value={d.deviceId}>
-                          {d.label || `Camera ${d.deviceId.slice(0, 8)}`}
-                        </option>
-                      ))
-                  }
+                  {devices.video.length === 0 ? (
+                    <option value="">Default camera</option>
+                  ) : (
+                    devices.video.map(d => (
+                      <option key={d.deviceId} value={d.deviceId}>
+                        {d.label || `Camera ${d.deviceId.slice(0, 8)}`}
+                      </option>
+                    ))
+                  )}
                 </select>
               </div>
             </div>
 
-            {/* State chips */}
             <div className="prejoin-state-row">
               <span className={`pj-state-chip ${micOn ? 'pj-state-chip--on' : 'pj-state-chip--off'}`}>
                 {micOn ? <MicOnIcon size={12} /> : <MicOffIcon size={12} />}
@@ -313,20 +398,14 @@ export default function PreJoin() {
               </span>
             </div>
 
-            {error && <div className="alert alert-danger">{error}</div>}
-
             <div className="row" style={{ marginTop: 8 }}>
               <Button type="submit" disabled={joining} style={{ flex: 1 }}>
-                {joining ? 'Joining…' : 'Join Now'}
-              </Button>
-              <Button type="button" variant="secondary" onClick={() => window.history.back()} style={{ flex: 1 }}>
-                Cancel
+                {joining ? 'Joining...' : 'Join Now'}
               </Button>
             </div>
           </form>
-
         </div>
       </div>
     </div>
-  )
+  );
 }
