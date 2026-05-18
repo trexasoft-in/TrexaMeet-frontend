@@ -51,7 +51,7 @@ export default function Room() {
       try {
         const data = await api.post(`/api/rooms/${roomCode}/join`);
         setRoomPayload(data);
-      } catch {
+      } catch (err) {
         navigate(`/prejoin/${roomCode}`, { replace: true });
       }
     })();

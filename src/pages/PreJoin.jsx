@@ -2,7 +2,13 @@ import { useEffect, useRef, useState, useCallback } from 'react';
 import { useNavigate, useParams, useLocation } from 'react-router-dom';
 import api from '../lib/api';
 import useAuth from '../hooks/useAuth';
-import { MicOnIcon, MicOffIcon, CameraOnIcon, CameraOffIcon, RefreshIcon } from '../components/meeting/icons';
+import {
+  MicOnIcon,
+  MicOffIcon,
+  CameraOnIcon,
+  CameraOffIcon,
+  RefreshIcon,
+} from '../components/meeting/icons';
 import Button from '../components/common/Button';
 import useRoomStore from '../store/room.store';
 
@@ -73,52 +79,54 @@ export default function PreJoin() {
     return { audio, video };
   }, []);
 
-  const startStream = useCallback(async (audioId, videoId) => {
-    try {
-      stopCurrentStream();
+  const startStream = useCallback(
+    async (audioId, videoId, micEnabled = micOn, camEnabled = camOn) => {
+      try {
+        stopCurrentStream();
 
-      const newStream = await navigator.mediaDevices.getUserMedia({
-        audio: micOn
-          ? (audioId ? { deviceId: { exact: audioId } } : true)
-          : false,
-        video: camOn
-          ? (videoId ? { deviceId: { exact: videoId } } : true)
-          : false,
-      });
-
-      streamRef.current = newStream;
-      setStream(newStream);
-      setError('');
-
-      const tracksAudio = newStream.getAudioTracks();
-      const tracksVideo = newStream.getVideoTracks();
-
-      if (tracksAudio.length > 0) {
-        tracksAudio.forEach(t => {
-          t.enabled = micOn;
+        const newStream = await navigator.mediaDevices.getUserMedia({
+          audio: micEnabled
+            ? (audioId ? { deviceId: { exact: audioId } } : true)
+            : false,
+          video: camEnabled
+            ? (videoId ? { deviceId: { exact: videoId } } : true)
+            : false,
         });
-      }
 
-      if (tracksVideo.length > 0) {
-        tracksVideo.forEach(t => {
-          t.enabled = camOn;
+        streamRef.current = newStream;
+        setStream(newStream);
+        setError('');
+
+        newStream.getAudioTracks().forEach(track => {
+          track.enabled = micEnabled;
         });
+
+        newStream.getVideoTracks().forEach(track => {
+          track.enabled = camEnabled;
+        });
+      } catch (err) {
+        setError(
+          err?.name === 'NotAllowedError'
+            ? 'Camera or microphone access was denied. Please allow permissions and try again.'
+            : 'Unable to access camera or microphone.'
+        );
       }
-    } catch (err) {
-      setError(
-        err?.name === 'NotAllowedError'
-          ? 'Camera or microphone access was denied. Please allow permissions and try again.'
-          : 'Unable to access camera or microphone.'
-      );
-    }
-  }, [camOn, micOn, stopCurrentStream]);
+    },
+    [camOn, micOn, stopCurrentStream]
+  );
 
   useEffect(() => {
     let cancelled = false;
 
-    const initDevices = async () => {
+    const initMedia = async () => {
       try {
-        await navigator.mediaDevices.getUserMedia({ audio: true, video: true });
+        const permissionStream = await navigator.mediaDevices.getUserMedia({
+          audio: true,
+          video: true,
+        });
+
+        permissionStream.getTracks().forEach(track => track.stop());
+
         if (cancelled) return;
 
         const { audio, video } = await loadDevices();
@@ -137,9 +145,10 @@ export default function PreJoin() {
           camEnabled: true,
         });
 
-        await startStream(aId, vId);
+        await startStream(aId, vId, true, true);
       } catch (err) {
         if (cancelled) return;
+
         setError(
           err?.name === 'NotAllowedError'
             ? 'Camera or microphone access was denied. Please allow permissions to continue.'
@@ -157,7 +166,7 @@ export default function PreJoin() {
       }
     };
 
-    initDevices();
+    initMedia();
 
     return () => {
       cancelled = true;
@@ -165,40 +174,56 @@ export default function PreJoin() {
     };
   }, [loadDevices, startStream, stopCurrentStream, updatePreJoin]);
 
-  const handleToggleMic = () => {
+  const handleToggleMic = async () => {
     const next = !micOn;
-    streamRef.current?.getAudioTracks()?.forEach(track => {
-      track.enabled = next;
-    });
     setMicOn(next);
-    updatePreJoin({ micEnabled: next, selectedMicId: selAudio });
+    updatePreJoin({
+      micEnabled: next,
+      camEnabled: camOn,
+      selectedMicId: selAudio,
+      selectedCameraId: selVideo,
+    });
+    await startStream(selAudio, selVideo, next, camOn);
   };
 
-  const handleToggleCam = () => {
+  const handleToggleCam = async () => {
     const next = !camOn;
-    streamRef.current?.getVideoTracks()?.forEach(track => {
-      track.enabled = next;
-    });
     setCamOn(next);
-    updatePreJoin({ camEnabled: next, selectedCameraId: selVideo });
+    updatePreJoin({
+      micEnabled: micOn,
+      camEnabled: next,
+      selectedMicId: selAudio,
+      selectedCameraId: selVideo,
+    });
+    await startStream(selAudio, selVideo, micOn, next);
   };
 
   const handleAudioChange = async e => {
     const next = e.target.value;
     setSelAudio(next);
-    updatePreJoin({ selectedMicId: next, micEnabled: micOn, selectedCameraId: selVideo, camEnabled: camOn });
-    await startStream(next, selVideo);
+    updatePreJoin({
+      selectedMicId: next,
+      selectedCameraId: selVideo,
+      micEnabled: micOn,
+      camEnabled: camOn,
+    });
+    await startStream(next, selVideo, micOn, camOn);
   };
 
   const handleVideoChange = async e => {
     const next = e.target.value;
     setSelVideo(next);
-    updatePreJoin({ selectedCameraId: next, micEnabled: micOn, selectedMicId: selAudio, camEnabled: camOn });
-    await startStream(selAudio, next);
+    updatePreJoin({
+      selectedMicId: selAudio,
+      selectedCameraId: next,
+      micEnabled: micOn,
+      camEnabled: camOn,
+    });
+    await startStream(selAudio, next, micOn, camOn);
   };
 
   const handleRefresh = async () => {
-    await startStream(selAudio, selVideo);
+    await startStream(selAudio, selVideo, micOn, camOn);
   };
 
   const handleJoin = async () => {
