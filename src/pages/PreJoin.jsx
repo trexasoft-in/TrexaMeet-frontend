@@ -16,7 +16,8 @@ export default function PreJoin() {
   const { roomCode: code } = useParams();
   const navigate = useNavigate();
   const location = useLocation();
-  const user = useAuth();
+  const { user: authUser, hydrated } = useAuth();
+  const isGuest = hydrated ? !authUser : false;
 
   const setRoomPayload = useRoomStore(s => s.setRoomPayload);
   const updatePreJoin = useRoomStore(s => s.updatePreJoin);
@@ -33,14 +34,6 @@ export default function PreJoin() {
   const [joining, setJoining] = useState(false);
   const [error, setError] = useState('');
   const [guestName, setGuestName] = useState('');
-  const [permissionRequested, setPermissionRequested] = useState(false);
-  const [isMobileDevice, setIsMobileDevice] = useState(false);
-
-  useEffect(() => {
-    const ua = navigator.userAgent || navigator.vendor || window.opera || '';
-    const mobile = /android|iphone|ipad|ipod|mobile/i.test(ua);
-    setIsMobileDevice(mobile);
-  }, []);
 
   useEffect(() => {
     const html = document.documentElement;
@@ -77,27 +70,21 @@ export default function PreJoin() {
     setStream(null);
   }, []);
 
-  const loadDevices = useCallback(async () => {
-    const list = await navigator.mediaDevices.enumerateDevices();
-    const audio = list.filter(d => d.kind === 'audioinput');
-    const video = list.filter(d => d.kind === 'videoinput');
-    setDevices({ audio, video });
-    return { audio, video };
-  }, []);
-
   const startStream = useCallback(
     async (audioId, videoId, micEnabled = micOn, camEnabled = camOn) => {
       try {
         stopCurrentStream();
 
-        const newStream = await navigator.mediaDevices.getUserMedia({
+        const constraints = {
           audio: micEnabled
             ? (audioId ? { deviceId: { exact: audioId } } : true)
             : false,
           video: camEnabled
             ? (videoId ? { deviceId: { exact: videoId } } : true)
             : false,
-        });
+        };
+
+        const newStream = await navigator.mediaDevices.getUserMedia(constraints);
 
         streamRef.current = newStream;
         setStream(newStream);
@@ -121,108 +108,64 @@ export default function PreJoin() {
     [camOn, micOn, stopCurrentStream]
   );
 
-  useEffect(() => {
-    let cancelled = false;
-
-    const initDesktopMedia = async () => {
-      if (isMobileDevice) return;
-
-      try {
-        const permissionStream = await navigator.mediaDevices.getUserMedia({
-          audio: true,
-          video: true,
-        });
-
-        permissionStream.getTracks().forEach(track => track.stop());
-
-        if (cancelled) return;
-
-        const { audio, video } = await loadDevices();
-        if (cancelled) return;
-
-        const aId = audio[0]?.deviceId || '';
-        const vId = video[0]?.deviceId || '';
-
-        setSelAudio(aId);
-        setSelVideo(vId);
-        setPermissionRequested(true);
-
-        updatePreJoin({
-          selectedMicId: aId,
-          selectedCameraId: vId,
-          micEnabled: true,
-          camEnabled: true,
-        });
-
-        await startStream(aId, vId, true, true);
-      } catch (err) {
-        if (cancelled) return;
-
-        setError(
-          err?.name === 'NotAllowedError'
-            ? 'Camera or microphone access was denied. Please allow permissions to continue.'
-            : 'Unable to access camera or microphone.'
-        );
-
-        try {
-          const { audio, video } = await loadDevices();
-          if (cancelled) return;
-          setSelAudio(audio[0]?.deviceId || '');
-          setSelVideo(video[0]?.deviceId || '');
-        } catch {
-          // ignore
-        }
-      }
-    };
-
-    initDesktopMedia();
-
-    return () => {
-      cancelled = true;
-      stopCurrentStream();
-    };
-  }, [isMobileDevice, loadDevices, startStream, stopCurrentStream, updatePreJoin]);
-
-  const handleRequestPermissions = async () => {
+  const initMedia = useCallback(async () => {
     try {
       setError('');
+      streamRef.current?.getTracks().forEach((t) => t.stop());
 
-      const permissionStream = await navigator.mediaDevices.getUserMedia({
+      const media = await navigator.mediaDevices.getUserMedia({
         audio: true,
         video: true,
       });
 
-      permissionStream.getTracks().forEach(track => track.stop());
+      streamRef.current = media;
+      setStream(media);
 
-      const { audio, video } = await loadDevices();
+      const list = await navigator.mediaDevices.enumerateDevices();
+      const audio = list.filter((d) => d.kind === 'audioinput');
+      const video = list.filter((d) => d.kind === 'videoinput');
+      setDevices({ audio, video });
 
-      const aId = audio[0]?.deviceId || '';
-      const vId = video[0]?.deviceId || '';
+      const activeAudioId = media.getAudioTracks()[0]?.getSettings?.().deviceId || audio[0]?.deviceId || '';
+      const activeVideoId = media.getVideoTracks()[0]?.getSettings?.().deviceId || video[0]?.deviceId || '';
 
-      setSelAudio(aId);
-      setSelVideo(vId);
-      setPermissionRequested(true);
+      setSelAudio(activeAudioId);
+      setSelVideo(activeVideoId);
+      setMicOn(media.getAudioTracks().some((t) => t.enabled));
+      setCamOn(media.getVideoTracks().some((t) => t.enabled));
 
       updatePreJoin({
-        selectedMicId: aId,
-        selectedCameraId: vId,
-        micEnabled: true,
-        camEnabled: true,
+        selectedMicId: activeAudioId,
+        selectedCameraId: activeVideoId,
+        micEnabled: media.getAudioTracks().some((t) => t.enabled),
+        camEnabled: media.getVideoTracks().some((t) => t.enabled),
       });
-
-      await startStream(aId, vId, true, true);
     } catch (err) {
       setError(
         err?.name === 'NotAllowedError'
-          ? 'Camera or microphone access was denied. Please allow permissions and try again.'
+          ? 'Camera or microphone access was denied. Allow access in browser settings.'
           : 'Unable to access camera or microphone.'
       );
+      setDevices({ audio: [], video: [] });
+      setStream(null);
     }
-  };
+  }, [updatePreJoin]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    (async () => {
+      if (cancelled) return;
+      await initMedia();
+    })();
+
+    return () => {
+      cancelled = true;
+      streamRef.current?.getTracks().forEach((t) => t.stop());
+    };
+  }, [initMedia]);
 
   const handleToggleMic = async () => {
-    if (!permissionRequested) return;
-
     const next = !micOn;
     setMicOn(next);
     updatePreJoin({
@@ -231,12 +174,14 @@ export default function PreJoin() {
       selectedMicId: selAudio,
       selectedCameraId: selVideo,
     });
-    await startStream(selAudio, selVideo, next, camOn);
+    if (stream) {
+      stream.getAudioTracks().forEach(t => {
+        t.enabled = next;
+      });
+    }
   };
 
   const handleToggleCam = async () => {
-    if (!permissionRequested) return;
-
     const next = !camOn;
     setCamOn(next);
     updatePreJoin({
@@ -245,53 +190,42 @@ export default function PreJoin() {
       selectedMicId: selAudio,
       selectedCameraId: selVideo,
     });
-    await startStream(selAudio, selVideo, micOn, next);
+    if (stream) {
+      stream.getVideoTracks().forEach(t => {
+        t.enabled = next;
+      });
+    }
   };
 
   const handleAudioChange = async e => {
     const next = e.target.value;
     setSelAudio(next);
-
     updatePreJoin({
       selectedMicId: next,
       selectedCameraId: selVideo,
       micEnabled: micOn,
       camEnabled: camOn,
     });
-
-    if (!permissionRequested) return;
     await startStream(next, selVideo, micOn, camOn);
   };
 
   const handleVideoChange = async e => {
     const next = e.target.value;
     setSelVideo(next);
-
     updatePreJoin({
       selectedMicId: selAudio,
       selectedCameraId: next,
       micEnabled: micOn,
       camEnabled: camOn,
     });
-
-    if (!permissionRequested) return;
     await startStream(selAudio, next, micOn, camOn);
   };
 
   const handleRefresh = async () => {
-    if (!permissionRequested) {
-      await handleRequestPermissions();
-      return;
-    }
-    await startStream(selAudio, selVideo, micOn, camOn);
+    await initMedia();
   };
 
   const handleJoin = async () => {
-    if (!permissionRequested) {
-      setError('Please allow camera and microphone access before joining.');
-      return;
-    }
-
     if (isGuest && !guestName.trim()) {
       setError('Please enter your name to join.');
       return;
@@ -328,14 +262,16 @@ export default function PreJoin() {
     }
   };
 
-  const initials = isGuest
-    ? (guestName.trim().charAt(0) || 'G').toUpperCase()
-    : (user?.user?.name || user?.user?.email || 'U')
-        .split(' ')
-        .map(w => w[0])
-        .slice(0, 2)
-        .join('')
-        .toUpperCase();
+  const initials = hydrated
+    ? isGuest
+      ? (guestName.trim().charAt(0) || 'G').toUpperCase()
+      : (authUser?.name || authUser?.email || 'U')
+          .split(' ')
+          .map(w => w[0])
+          .slice(0, 2)
+          .join('')
+          .toUpperCase()
+    : '...';
 
   return (
     <div className="prejoin-page">
@@ -343,14 +279,13 @@ export default function PreJoin() {
         <div className="prejoin-preview">
           <video
             ref={videoRef}
-            className="prejoin-video"
-            style={{ display: camOn && permissionRequested ? 'block' : 'none' }}
+            className={`prejoin-video ${camOn ? 'is-visible' : 'is-hidden'}`}
             autoPlay
             muted
             playsInline
           />
 
-          {(!camOn || !permissionRequested) && (
+          {!camOn && (
             <div className="prejoin-novideo">
               <div className="prejoin-avatar">{initials}</div>
             </div>
@@ -394,24 +329,15 @@ export default function PreJoin() {
             <h1>Ready to join?</h1>
             <p>
               Joining as{' '}
-              <strong>{isGuest ? guestName || 'Guest' : user?.user?.name || user?.user?.email}</strong>
+              <strong>
+                {hydrated
+                  ? isGuest
+                    ? guestName || 'Guest'
+                    : authUser?.name || authUser?.email
+                  : '...'}
+              </strong>
             </p>
           </div>
-
-          {isMobileDevice && !permissionRequested && (
-            <div className="prejoin-mobile-permission">
-              <p className="prejoin-mobile-permission-text">
-                Tap below to allow camera and microphone access on mobile.
-              </p>
-              <button
-                type="button"
-                className="btn btn-primary"
-                onClick={handleRequestPermissions}
-              >
-                Enable camera & microphone
-              </button>
-            </div>
-          )}
 
           {error && (
             <div className="prejoin-error" role="alert">
@@ -426,7 +352,7 @@ export default function PreJoin() {
               handleJoin();
             }}
           >
-            {isGuest && (
+            {hydrated && isGuest && (
               <div className="prejoin-guest-name">
                 <label className="label">Your name</label>
                 <input
