@@ -19,12 +19,14 @@ export default function RootRedirect() {
   const navigate = useNavigate();
 
   useEffect(() => {
+    // Already hydrated — just route
     if (hydrated) {
       navigate(user ? "/dashboard" : "/landing", { replace: true });
       return;
     }
 
     const init = async () => {
+      // 1. CentralAuth redirect handoff
       const fromUrl = bootstrapCentralAuthSession();
       if (fromUrl?.accessToken && fromUrl?.user) {
         setStoreSession(fromUrl);
@@ -32,30 +34,33 @@ export default function RootRedirect() {
         return;
       }
 
+      // 2. Valid stored session
       const stored = getSession();
       if (stored?.accessToken && stored?.user) {
         try {
           const { jwtDecode } = await import("jwt-decode");
           const { exp } = jwtDecode(stored.accessToken);
           const isExpired = exp ? Date.now() / 1000 > exp - 30 : false;
-
           if (!isExpired) {
             setStoreSession(stored);
             navigate("/dashboard", { replace: true });
             return;
           }
-        } catch {}
+        } catch {
+          // malformed token, fall through
+        }
       }
 
+      // 3. Refresh via CentralAuth API backend (NOT the frontend host)
       const refreshToken = getRefreshToken();
       if (refreshToken) {
         try {
-          const base = (import.meta.env.VITE_CENTRAL_AUTH_URL || "").replace(/\/$/, "");
-          const data = await axios.post(`${base}/api/auth/refresh`, {
+          const base = (import.meta.env.VITE_CENTRAL_AUTH_API_URL || "").replace(/\/$/, "");
+          const { data } = await axios.post(`${base}/api/auth/refresh`, {
             refreshtoken: refreshToken,
           });
-
-          const newToken = data?.data?.accesstoken || data?.data?.accessToken;
+          // CentralAuth backend returns { accesstoken } at top level
+          const newToken = data?.accesstoken || data?.accessToken;
           if (newToken && stored?.user) {
             const refreshed = { accessToken: newToken, user: stored.user };
             setSession(refreshed);
