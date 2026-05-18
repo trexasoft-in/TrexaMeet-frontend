@@ -344,13 +344,13 @@ export default function PreJoin() {
           <video
             ref={videoRef}
             className="prejoin-video"
-            style={{ display: camOn ? 'block' : 'none' }}
+            style={{ display: camOn && permissionRequested ? 'block' : 'none' }}
             autoPlay
             muted
             playsInline
           />
 
-          {!camOn && (
+          {(!camOn || !permissionRequested) && (
             <div className="prejoin-novideo">
               <div className="prejoin-avatar">{initials}</div>
             </div>
@@ -393,14 +393,15 @@ export default function PreJoin() {
           <div className="prejoin-meta">
             <h1>Ready to join?</h1>
             <p>
-              Joining as <strong>{isGuest ? guestName || 'Guest' : (user?.user?.name || user?.user?.email)}</strong>
+              Joining as{' '}
+              <strong>{isGuest ? guestName || 'Guest' : user?.user?.name || user?.user?.email}</strong>
             </p>
           </div>
 
           {isMobileDevice && !permissionRequested && (
             <div className="prejoin-mobile-permission">
               <p className="prejoin-mobile-permission-text">
-                On mobile, tap below to allow camera and microphone access.
+                Tap below to allow camera and microphone access on mobile.
               </p>
               <button
                 type="button"
@@ -414,11 +415,6 @@ export default function PreJoin() {
 
           {error && (
             <div className="prejoin-error" role="alert">
-              <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" width="15" height="15" aria-hidden="true">
-                <circle cx="12" cy="12" r="10" />
-                <line x1="12" y1="8" x2="12" y2="12" />
-                <line x1="12" y1="16" x2="12.01" y2="16" />
-              </svg>
               {error}
             </div>
           )}
