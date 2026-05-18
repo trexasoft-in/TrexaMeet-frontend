@@ -3289,3 +3289,21 @@ html:has(.landing-page),
   margin-bottom: 4px;
 }
 
+.prejoin-mobile-permission {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 14px;
+  padding: 12px;
+  border-radius: 12px;
+  background: var(--meet-surface-2, var(--surface-2, #F3EEF9));
+  border: 1px solid var(--meet-border, var(--border, #E2D8EF));
+}
+
+.prejoin-mobile-permission-text {
+  font-size: 13px;
+  color: var(--meet-text-muted, var(--text-muted, #6B5F7A));
+  margin: 0;
+}
+
+

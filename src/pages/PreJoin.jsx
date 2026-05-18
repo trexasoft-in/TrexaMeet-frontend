@@ -33,8 +33,14 @@ export default function PreJoin() {
   const [joining, setJoining] = useState(false);
   const [error, setError] = useState('');
   const [guestName, setGuestName] = useState('');
+  const [permissionRequested, setPermissionRequested] = useState(false);
+  const [isMobileDevice, setIsMobileDevice] = useState(false);
 
-  const isGuest = !user?.user;
+  useEffect(() => {
+    const ua = navigator.userAgent || navigator.vendor || window.opera || '';
+    const mobile = /android|iphone|ipad|ipod|mobile/i.test(ua);
+    setIsMobileDevice(mobile);
+  }, []);
 
   useEffect(() => {
     const html = document.documentElement;
@@ -118,7 +124,9 @@ export default function PreJoin() {
   useEffect(() => {
     let cancelled = false;
 
-    const initMedia = async () => {
+    const initDesktopMedia = async () => {
+      if (isMobileDevice) return;
+
       try {
         const permissionStream = await navigator.mediaDevices.getUserMedia({
           audio: true,
@@ -137,6 +145,7 @@ export default function PreJoin() {
 
         setSelAudio(aId);
         setSelVideo(vId);
+        setPermissionRequested(true);
 
         updatePreJoin({
           selectedMicId: aId,
@@ -166,15 +175,54 @@ export default function PreJoin() {
       }
     };
 
-    initMedia();
+    initDesktopMedia();
 
     return () => {
       cancelled = true;
       stopCurrentStream();
     };
-  }, [loadDevices, startStream, stopCurrentStream, updatePreJoin]);
+  }, [isMobileDevice, loadDevices, startStream, stopCurrentStream, updatePreJoin]);
+
+  const handleRequestPermissions = async () => {
+    try {
+      setError('');
+
+      const permissionStream = await navigator.mediaDevices.getUserMedia({
+        audio: true,
+        video: true,
+      });
+
+      permissionStream.getTracks().forEach(track => track.stop());
+
+      const { audio, video } = await loadDevices();
+
+      const aId = audio[0]?.deviceId || '';
+      const vId = video[0]?.deviceId || '';
+
+      setSelAudio(aId);
+      setSelVideo(vId);
+      setPermissionRequested(true);
+
+      updatePreJoin({
+        selectedMicId: aId,
+        selectedCameraId: vId,
+        micEnabled: true,
+        camEnabled: true,
+      });
+
+      await startStream(aId, vId, true, true);
+    } catch (err) {
+      setError(
+        err?.name === 'NotAllowedError'
+          ? 'Camera or microphone access was denied. Please allow permissions and try again.'
+          : 'Unable to access camera or microphone.'
+      );
+    }
+  };
 
   const handleToggleMic = async () => {
+    if (!permissionRequested) return;
+
     const next = !micOn;
     setMicOn(next);
     updatePreJoin({
@@ -187,6 +235,8 @@ export default function PreJoin() {
   };
 
   const handleToggleCam = async () => {
+    if (!permissionRequested) return;
+
     const next = !camOn;
     setCamOn(next);
     updatePreJoin({
@@ -201,32 +251,47 @@ export default function PreJoin() {
   const handleAudioChange = async e => {
     const next = e.target.value;
     setSelAudio(next);
+
     updatePreJoin({
       selectedMicId: next,
       selectedCameraId: selVideo,
       micEnabled: micOn,
       camEnabled: camOn,
     });
+
+    if (!permissionRequested) return;
     await startStream(next, selVideo, micOn, camOn);
   };
 
   const handleVideoChange = async e => {
     const next = e.target.value;
     setSelVideo(next);
+
     updatePreJoin({
       selectedMicId: selAudio,
       selectedCameraId: next,
       micEnabled: micOn,
       camEnabled: camOn,
     });
+
+    if (!permissionRequested) return;
     await startStream(selAudio, next, micOn, camOn);
   };
 
   const handleRefresh = async () => {
+    if (!permissionRequested) {
+      await handleRequestPermissions();
+      return;
+    }
     await startStream(selAudio, selVideo, micOn, camOn);
   };
 
   const handleJoin = async () => {
+    if (!permissionRequested) {
+      setError('Please allow camera and microphone access before joining.');
+      return;
+    }
+
     if (isGuest && !guestName.trim()) {
       setError('Please enter your name to join.');
       return;
@@ -331,6 +396,21 @@ export default function PreJoin() {
               Joining as <strong>{isGuest ? guestName || 'Guest' : (user?.user?.name || user?.user?.email)}</strong>
             </p>
           </div>
+
+          {isMobileDevice && !permissionRequested && (
+            <div className="prejoin-mobile-permission">
+              <p className="prejoin-mobile-permission-text">
+                On mobile, tap below to allow camera and microphone access.
+              </p>
+              <button
+                type="button"
+                className="btn btn-primary"
+                onClick={handleRequestPermissions}
+              >
+                Enable camera & microphone
+              </button>
+            </div>
+          )}
 
           {error && (
             <div className="prejoin-error" role="alert">
